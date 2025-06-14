@@ -1,0 +1,446 @@
+import os
+import cv2
+import numpy as np
+import time
+from pyzbar.pyzbar import decode
+from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
+import qrcode
+from PIL import Image
+import math
+
+NOMBRE_CARNET = 'nombre_carnet.xlsx'
+DIR_ASISTENCIAS = 'Asistencias'
+ARCHIVO_USUARIOS = 'usuarios_creados.xlsx'
+DIR_QRS = os.path.join(DIR_ASISTENCIAS, "QRs")
+ARCHIVO_ASISTENCIAS = os.path.join(DIR_ASISTENCIAS, 'asistencia.xlsx')
+COLUMNAS_ASISTENCIAS = ["Nombre", "Carnet", "Fecha", "Hora"]
+# COLUMNAS_USUARIO= ["Nombre","Carnet" "Edad","Telefono","Encargado","Telefono Encargado","Correo Encargado"]
+COLUMNAS_USUARIO = [
+    "Nombre", "Carnet", "Edad", "Telefono", 
+    "Encargado", "Telefono Encargado", "Correo Encargado", 
+    "Carrera", "Estado"  # Agregamos Carrera y Estado
+]
+COLUMNAS_NC = ["Carnet", "Nombre"]
+
+def solicitar_edad():
+    while True:
+        try:
+            numero = int(input("Ingrese Su Edad "))
+            if numero > 0:
+                return numero      
+            else:
+                print("El número debe ser positivo.")
+        except ValueError:
+            print("Entrada inválida. Por favor, ingrese un número entero.")
+
+def solicitar_carnet():
+    while True:
+        try:
+            numero = int(input("Ingrese Su Carnet "))
+            if numero > 0:
+                if len(str(numero)) == 9:
+                    return numero
+                else:
+                    print("El número debe tener exactamente 9 dígitos.")
+            else:
+                print("El número debe ser positivo.")
+        except ValueError:
+            print("Entrada inválida. Por favor, ingrese un número entero.")
+
+def solicitar_numero_telefono():
+    while True:
+        try:
+            numero = int(input("Ingrese Su Numero de Teléfono: "))
+            if numero > 0:
+                if len(str(numero)) == 8:
+                    return numero
+                else:
+                    print("El número debe tener exactamente 8 dígitos.")
+            else:
+                print("El número debe ser positivo.")
+        except ValueError:
+            print("Entrada inválida. Por favor, ingrese un número entero.")
+
+def solicitar_string():
+    while True:
+        texto = input("Ingrese Su Nombre: ")
+        if texto.strip():
+            if any(char.isdigit() for char in texto):
+                print("El nombre no debe contener números.")
+            else:
+                return texto
+        else:
+            print("El texto no puede estar vacío.")
+
+def solicitar_string_carrera():
+    while True:
+        texto = input("Ingrese Su Carrera: ")
+        if texto.strip():
+            if any(char.isdigit() for char in texto):
+                print("El nombre no debe contener números.")
+            else:
+                return texto
+        else:
+            print("El texto no puede estar vacío.")
+
+def solicitar_string_pariente():
+    while True:
+        texto = input("Ingrese Nombre del Encargado: ")
+        if texto.strip():
+            if any(char.isdigit() for char in texto):
+                print("El nombre no debe contener números.")
+            else:
+                return texto
+        else:
+            print("El texto no puede estar vacío.")
+
+def generar_chivos(archivo, columnas):
+    if not os.path.exists(archivo):
+        print("El Archivo No Existe, Creando Uno Nuevo...")
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Datos"
+        for idx, columna in enumerate(columnas, start=1):
+            letra = get_column_letter(idx)
+            ws[f"{letra}1"] = columna
+        wb.save(archivo)
+    else:
+        print("El Archivo ya existe, Agregando Datos..")
+        wb = load_workbook(archivo)
+        ws = wb.active
+
+def obtener_siguiente_carnet(NOMBRE_CARNET):
+    try:
+        wb = load_workbook(NOMBRE_CARNET)
+        ws = wb.active
+        carnets = []
+        for row in ws.iter_rows(min_row=2, values_only=True):  
+            if row[1] is not None:
+                carnets.append(int(row[1]))
+        if carnets:
+            return str(max(carnets) + 1)
+        else:
+            return "202500000"
+    except FileNotFoundError:
+        return "202500000"
+
+def agregar_datos_nqr(nombre,carnet):
+        generar_chivos(NOMBRE_CARNET,COLUMNAS_NC)
+        wb = load_workbook(NOMBRE_CARNET)
+        ws = wb.active
+        max_row = ws.max_row
+        nueva_fila = [nombre,carnet]
+        ws.append(nueva_fila)
+        wb.save(NOMBRE_CARNET)
+
+def crear_qr(nombre, carnet):
+    qr_data = f"Carnet: {carnet}\nNombre: {nombre}"
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(qr_data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    ruta = os.path.join(DIR_QRS, f"{carnet}.png")
+    if not os.path.exists(DIR_QRS):
+        os.makedirs(DIR_QRS)
+    img.save(ruta)  
+
+def agregar_datos_usuario(nombre,carnet,edad,telefono,nombre_encargado,telefono_encargado,correo_encargado):
+    generar_chivos(ARCHIVO_USUARIOS,COLUMNAS_USUARIO)
+    wb = load_workbook(ARCHIVO_USUARIOS)
+    ws = wb.active
+    nueva_fila = [nombre,carnet, edad, telefono, nombre_encargado,telefono_encargado,correo_encargado]
+    for row in ws.iter_rows(min_row=6,values_only=True):
+        if row[0] == nombre and row[1] == carnet and row[2] == edad and row[3] == telefono and row[4] == nombre_encargado and row[5] == telefono_encargado and row[6] == correo_encargado:
+            print("El Usuario ya existe")
+            return
+    ws.append(nueva_fila)
+    wb.save(ARCHIVO_USUARIOS)
+    agregar_datos_nqr(nombre,carnet)
+    crear_qr(nombre, carnet)
+    print("Usuario Agregado")
+
+def inicializar_directorios():
+    """Crea los directorios necesarios si no existen"""
+    os.makedirs(DIR_QRS, exist_ok=True)
+
+def inicializar_archivo_asistencias():
+    """Crea el archivo de asistencias con las columnas necesarias si no existe"""
+    if not os.path.exists(ARCHIVO_ASISTENCIAS):
+        print("El Archivo No Existe, Creando Uno Nuevo...")
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Datos"
+        for idx, columna in enumerate(COLUMNAS_ASISTENCIAS, start=1):
+            ws[f"{get_column_letter(idx)}1"] = columna
+        wb.save(ARCHIVO_ASISTENCIAS)
+    else:
+        print("El Archivo ya existe, listo para agregar datos.")
+
+def verificar_carnet(carnet: str) -> bool:
+    """Verifica si el carnet existe en la base de datos"""
+    try:
+        wb = load_workbook(NOMBRE_CARNET)
+        ws = wb.active
+        for row in ws.iter_rows(values_only=True):
+            if row[1] == carnet:
+                print("Carnet Correcto")
+                return True
+        print("Carnet Inválido")
+        return False
+    except Exception as e:
+        print(f"Error al verificar carnet: {e}")
+        return False
+
+def procesar_datos_qr(data: str) -> tuple:
+    """Extrae y valida los datos del QR"""
+    try:
+        if "Carnet:" not in data or "Nombre:" not in data:
+            print("Formato incorrecto: faltan 'Carnet:' o 'Nombre:' en la cadena.")
+            return None, None
+        
+        carnet = data.split("Carnet:")[1].split("Nombre:")[0].strip()
+        nombre = data.split("Nombre:")[1].strip()
+        return nombre, carnet
+    except Exception as e:
+        print(f"Error al procesar QR: {e}")
+        return None, None
+
+def registrar_asistencia(nombre: str, carnet: str) -> bool:
+    """Registra la asistencia en el archivo Excel si no está ya registrada"""
+    try:
+        wb = load_workbook(ARCHIVO_ASISTENCIAS)
+        ws = wb.active
+        
+        fecha_actual = time.strftime("%Y-%m-%d")
+        hora_actual = time.strftime("%H:%M:%S")
+        
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row[1] == carnet and row[2] == fecha_actual:
+                print("La asistencia ya fue registrada hoy.")
+                return False
+        
+        nueva_fila = [nombre, carnet, fecha_actual, hora_actual]
+        ws.append(nueva_fila)
+        wb.save(ARCHIVO_ASISTENCIAS)
+        print("Asistencia registrada exitosamente.")
+        return True
+    except Exception as e:
+        print(f"Error al registrar asistencia: {e}")
+        return False
+
+def mostrar_frame(frame, codigo=None, data=None):
+    """Muestra el frame con anotaciones opcionales para el código QR"""
+    if codigo:
+        puntos = codigo.polygon
+        pts = [(p.x, p.y) for p in puntos]
+        cv2.polylines(frame, [np.array(pts, np.int32)], True, (0, 255, 0), 3)
+        x, y, w, h = codigo.rect
+        cv2.putText(frame, data, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+    
+    cv2.imshow("Lector de QR", frame)
+
+def leer_qr_camara():
+    """Función principal para leer códigos QR desde la cámara"""
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("No se pudo acceder a la cámara.")
+        return
+    print("Escanea el código QR con la cámara... Presiona 'q' para salir.")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Error al capturar frame.")
+            break
+        # Decodificar códigos QR
+        codigos = decode(frame)
+        if codigos:
+            for codigo in codigos:
+                try:
+                    data = codigo.data.decode('utf-8')
+                    nombre, carnet = procesar_datos_qr(data)
+                    
+                    if nombre and carnet and verificar_carnet(carnet):
+                        registrar_asistencia(nombre, carnet)
+                        # ser.write(b'1')  
+                    else:
+                        print("Código QR no válido.")
+                        # ser.write(b'0')  
+                    mostrar_frame(frame, codigo, data)
+                except Exception as e:
+                    print(f"Error al procesar código QR: {e}")
+                    mostrar_frame(frame)
+        else:
+            mostrar_frame(frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    # ser.close()
+def verificar_asistencias_por_fecha():
+    fecha_input = input("Ingrese la fecha a verificar (YYYY-MM-DD): ").strip()
+    try:
+        wb_usuarios = load_workbook(ARCHIVO_USUARIOS)
+        ws_usuarios = wb_usuarios.active
+        todos_usuarios = [
+            (row[0], str(row[1]), row[6])  # nombre, carnet, correo encargado
+            for row in ws_usuarios.iter_rows(min_row=2, values_only=True)
+        ]
+        wb_asistencias = load_workbook(ARCHIVO_ASISTENCIAS)
+        ws_asistencias = wb_asistencias.active
+        asistencias_fecha = [
+            (row[0], str(row[1])) 
+            for row in ws_asistencias.iter_rows(min_row=2, values_only=True)
+            if row[2] == fecha_input
+        ]
+
+        carnets_asistieron = set(c[1] for c in asistencias_fecha)
+
+        print("\n📋 Lista de asistencia del día:", fecha_input)
+        for nombre, carnet, correo_tutor in todos_usuarios:
+            if carnet in carnets_asistieron:
+                print(f"✔ {nombre} ({carnet}) - PRESENTE")
+            else:
+                print(f"✘ {nombre} ({carnet}) - AUSENTE | 📧 Correo del Encargado: {correo_tutor}")
+                correo_obtenido = correo_tutor.strip()
+                print(correo_obtenido)
+
+    except Exception as e:
+        print("Error al verificar asistencias:", e)
+
+
+def obtener_lista_usuarios():
+    """Obtiene la lista completa de usuarios registrados"""
+    try:
+        wb = load_workbook(ARCHIVO_USUARIOS)
+        ws = wb.active
+        usuarios = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row[0]:  # Si tiene nombre
+                usuarios.append({
+                    'Nombre': row[0],
+                    'Carnet': row[1],
+                    'Correo Encargado': row[6] if len(row) > 6 else 'No especificado',
+                    'Carrera': row[7] if len(row) > 7 else 'No especificado'
+                })
+        return usuarios
+    except Exception as e:
+        print(f"Error al obtener usuarios: {e}")
+        return []
+
+def obtener_asistencias_por_fecha(fecha):
+    """Obtiene las asistencias de una fecha específica"""
+    try:
+        wb = load_workbook(ARCHIVO_ASISTENCIAS)
+        ws = wb.active
+        asistencias = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row[2] == fecha:
+                asistencias.append(row[1])  # Guardamos solo el carnet
+        return asistencias
+    except Exception as e:
+        print(f"Error al obtener asistencias: {e}")
+        return []
+
+def generar_reporte_asistencias():
+    """Genera un reporte de asistencias para el día actual"""
+    fecha_actual = time.strftime("%Y-%m-%d")
+    usuarios = obtener_lista_usuarios()
+    asistencias = obtener_asistencias_por_fecha(fecha_actual)
+    
+    presentes = []
+    ausentes = []
+    
+    for usuario in usuarios:
+        if usuario['Carnet'] in asistencias:
+            presentes.append(usuario)
+        else:
+            ausentes.append(usuario)
+    
+    print("\n=== Reporte de Asistencias ===")
+    print(f"Fecha: {fecha_actual}")
+    print(f"\nPresentes ({len(presentes)}):")
+    for usuario in presentes:
+        print(f"- {usuario['Nombre']} ({usuario['Carnet']}) - {usuario['Carrera']}")
+        print(f"{usuario['Correo Encargado']}")
+    print(f"\nAusentes ({len(ausentes)}):")
+    for usuario in ausentes:
+        print(f"- {usuario['Nombre']} ({usuario['Carnet']}) - {usuario['Carrera']}")
+        print(f"{usuario['Correo Encargado']}")
+    
+    # Opcional: Guardar el reporte en un archivo
+    guardar_reporte_en_archivo(fecha_actual, presentes, ausentes)
+    
+    return presentes, ausentes
+
+def guardar_reporte_en_archivo(fecha, presentes, ausentes):
+    """Guarda el reporte en un archivo de texto"""
+    reporte_dir = os.path.join(DIR_ASISTENCIAS, "Reportes")
+    os.makedirs(reporte_dir, exist_ok=True)
+    
+    nombre_archivo = os.path.join(reporte_dir, f"reporte_{fecha}.txt")
+    
+    with open(nombre_archivo, 'w') as f:
+        f.write(f"=== Reporte de Asistencias ===\n")
+        f.write(f"Fecha: {fecha}\n\n")
+        
+        f.write(f"Presentes ({len(presentes)}):\n")
+        for usuario in presentes:
+            f.write(f"- {usuario['Nombre']} ({usuario['Carnet']}) - {usuario['Carrera']}\n")
+        
+        f.write(f"\nAusentes ({len(ausentes)}):\n")
+        for usuario in ausentes:
+            f.write(f"- {usuario['Nombre']} ({usuario['Carnet']}) - {usuario['Carrera']}\n")
+    
+    print(f"\nReporte guardado en: {nombre_archivo}")
+
+if __name__ == "__main__":
+    inicializar_directorios()
+    inicializar_archivo_asistencias()
+    
+    while True:
+        print("\n=== Sistema de Gestión de Asistencias ===")
+        print("1. Registrar nuevo usuario")
+        print("2. Tomar asistencia")
+        print("3. Generar reporte de asistencias")
+        print("4. Salir")
+        
+        try:
+            opcion = int(input("Seleccione una opción: "))
+            
+            if opcion == 1:
+                print("\nBienvenido al Registro de Usuarios")
+                nombre = solicitar_string()
+                edad = solicitar_edad()
+                carnet = obtener_siguiente_carnet(NOMBRE_CARNET)
+                telefono = solicitar_numero_telefono()
+                encargado = solicitar_string_pariente()
+                telefono_encargado = solicitar_numero_telefono()
+                correo_env = input("Ingrese un Correo: ")
+                carrera = solicitar_string_carrera()
+                agregar_datos_usuario(nombre, carnet, edad, telefono, encargado, telefono_encargado, correo_env)
+                
+            elif opcion == 2:
+                print("\nTomar Asistencia")
+                leer_qr_camara()
+                
+            elif opcion == 3:
+                print("\nGenerando Reporte de Asistencias...")
+                generar_reporte_asistencias()
+                
+            elif opcion == 4:
+                print("Saliendo del sistema...")
+                break
+                
+            else:
+                print("Opción no válida. Intente nuevamente.")
+                
+        except ValueError:
+            print("Por favor, ingrese un número válido.")
