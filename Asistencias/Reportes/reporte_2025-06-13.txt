@@ -1,9 +1,0 @@
-=== Reporte de Asistencias ===
-Fecha: 2025-06-13
-
-Presentes (3):
-- Emerson Aldair Perez Rivera (202500000) - No especificado
-- Aldair Emerson Rivera Perez (202500001) - No especificado
-- Emerson Perez (202500002) - No especificado
-
-Ausentes (0):
