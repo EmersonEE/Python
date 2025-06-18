@@ -17,6 +17,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import paho.mqtt.client as mqtt
 
+
 BROKER = "192.168.1.136"
 PORT = 1883
 TOPIC = "/leds"
@@ -34,7 +35,7 @@ DIR_ASISTENCIAS = 'Asistencias'
 ARCHIVO_USUARIOS = 'usuarios_creados.xlsx'
 DIR_QRS = os.path.join(DIR_ASISTENCIAS, "QRs")
 ARCHIVO_ASISTENCIAS = os.path.join(DIR_ASISTENCIAS, 'asistencia.xlsx')
-ARCHIVO_ESTADISTIVAS = os.path.join(DIR_ASISTENCIAS, 'estadisticas.xlsx')
+ARCHIVO_ESTADISTICAS = os.path.join(DIR_ASISTENCIAS, 'estadisticas.xlsx')
 COLUMNAS_ASISTENCIAS = ["Nombre", "Carnet", "Fecha", "Hora"]
 # COLUMNAS_USUARIO= ["Nombre","Carnet" "Edad","Telefono","Encargado","Telefono Encargado","Correo Encargado"]
 COLUMNAS_USUARIO = [
@@ -48,221 +49,319 @@ class SistemaAsistenciasApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Sistema de Gestión de Asistencias")
-        self.root.geometry("1000x700")
-        self.style = ttk.Style()
-        self.style.configure('TFrame', background='#f0f0f0')
-        self.style.configure('TLabel', background='#f0f0f0', font=('Arial', 10))
-        self.style.configure('TButton', font=('Arial', 10))
-        self.style.configure('Header.TLabel', font=('Arial', 12, 'bold'))
+        self.root.geometry("1100x750")  # Tamaño ligeramente mayor
+        self.root.minsize(1000, 700)  # Tamaño mínimo
+        self.root.configure(bg='#f8f9fa')  # Fondo coherente con el estilo
+        
+        self.aplicar_estilos()
+        
         self.mqtt_cliente = mqtt.Client()
         self.mqtt_cliente.connect(BROKER, PORT, 60)
         self.mqtt_cliente.loop_start()
+        
         # Variables para la cámara
         self.cap = None
         self.running = False
         
-        # Crear el notebook (pestañas)
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
-        self.aplicar_estilos()
+        # Crear contenedor principal con sombra visual
+        main_container = ttk.Frame(self.root, style='Card.TFrame')
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Crear el notebook (pestañas) con estilo mejorado
+        self.notebook = ttk.Notebook(main_container)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
         # Crear las pestañas
         self.crear_pestana_registro()
         self.crear_pestana_asistencia()
         self.crear_pestana_reportes()
         self.crear_pestana_verificacion()
         
-        # Inicializar directorios y archivos
+        # Inicialización de archivos y directorios
         self.inicializar_directorios()
         self.inicializar_archivo_asistencias()
+        # self.inicializar_archivo_estadisticas()
+        
+        # Añadir un footer con información
+        self.crear_footer()
 
-        self.inicializar_estadisticas()
-
+    def crear_footer(self):
+        footer = ttk.Frame(self.root, style='Footer.TFrame')
+        footer.pack(fill=tk.X, pady=(5, 0))
+        
+        version_label = ttk.Label(
+            footer, 
+            text="Sistema de Gestión de Asistencias v1.0", 
+            style='Footer.TLabel'
+        )
+        version_label.pack(side=tk.LEFT, padx=10)
+        
+        status_label = ttk.Label(
+            footer, 
+            text="Conectado", 
+            style='Status.TLabel'
+        )
+        status_label.pack(side=tk.RIGHT, padx=10)
 
     def aplicar_estilos(self):
         style = ttk.Style()
         
-        # Usar un tema base más moderno
+        # Usar tema moderno con elementos planos
         style.theme_use('clam')
         
-        # Paleta de colores profesional y accesible
+        # Paleta de colores moderna y profesional
         colors = {
-            'primary': '#2b5876',
-            'secondary': '#4e4376',
-            'accent': '#00c6fb',
-            'light_bg': '#f8f9fa',
-            'dark_text': '#212529',
-            'light_text': '#f8f9fa',
-            'success': '#28a745',
-            'warning': '#ffc107',
-            'danger': '#dc3545'
+            'primary': '#2563eb',  # Azul vibrante
+            'primary_dark': '#1e40af',
+            'secondary': '#7c3aed',  # Púrpura
+            'accent': '#06b6d4',  # Cyan
+            'light_bg': '#f8fafc',
+            'lighter_bg': '#ffffff',
+            'dark_text': '#1e293b',
+            'medium_text': '#475569',
+            'light_text': '#f8fafc',
+            'success': '#10b981',
+            'warning': '#f59e0b',
+            'danger': '#ef4444',
+            'border': '#e2e8f0'
         }
         
         # Configuración general
-        style.configure('TFrame', background=colors['light_bg'])
+        style.configure('.', font=('Segoe UI', 10))
+        
+        # Estilo para tarjetas/contenedores
+        style.configure('Card.TFrame', 
+                    background=colors['lighter_bg'],
+                    borderwidth=1,
+                    relief='solid',
+                    bordercolor=colors['border'])
+        
+        # Estilo para footer
+        style.configure('Footer.TFrame', background=colors['primary'])
+        style.configure('Footer.TLabel', 
+                    background=colors['primary'],
+                    foreground=colors['light_text'],
+                    font=('Segoe UI', 9))
+        style.configure('Status.TLabel', 
+                    background=colors['primary'],
+                    foreground='#86efac',  # Verde claro
+                    font=('Segoe UI', 9, 'bold'))
+        
+        # Configuración de etiquetas
         style.configure('TLabel', 
                     background=colors['light_bg'], 
                     font=('Segoe UI', 10), 
                     foreground=colors['dark_text'])
+        
         style.configure('Header.TLabel', 
                     background=colors['primary'], 
                     foreground=colors['light_text'], 
-                    font=('Segoe UI', 16, 'bold'),
+                    font=('Segoe UI Semibold', 16),
                     padding=10)
         
-        # Botones
+        style.configure('Subheader.TLabel',
+                    font=('Segoe UI Semibold', 12),
+                    foreground=colors['primary_dark'])
+        
+        # Botones modernos
         style.configure('TButton', 
-                    font=('Segoe UI', 10, 'bold'), 
+                    font=('Segoe UI Semibold', 10), 
                     background=colors['primary'], 
                     foreground=colors['light_text'],
-                    borderwidth=1,
-                    relief='raised',
-                    padding=(10, 5))
+                    borderwidth=0,
+                    padding=(12, 6),
+                    focuscolor=colors['primary'] + '00')  # Transparente
+                    
         style.map('TButton', 
-                background=[('active', colors['accent']), 
-                            ('pressed', colors['secondary'])], 
+                background=[('active', colors['primary_dark']), 
+                            ('pressed', colors['primary_dark'])], 
                 foreground=[('active', colors['light_text']), 
                             ('pressed', colors['light_text'])])
         
-        # Treeview (tablas)
+        # Botones de acción
+        style.configure('Accent.TButton',
+                    background=colors['accent'],
+                    foreground=colors['light_text'])
+        style.map('Accent.TButton',
+                background=[('active', '#0891b2'), 
+                            ('pressed', '#0e7490')])
+        
+        # Treeview (tablas modernas)
         style.configure('Treeview.Heading', 
-                    font=('Segoe UI', 10, 'bold'), 
+                    font=('Segoe UI Semibold', 10), 
                     background=colors['primary'], 
                     foreground=colors['light_text'],
-                    padding=5)
+                    padding=5,
+                    relief='flat')
+                    
         style.configure('Treeview', 
-                    background='white', 
+                    background=colors['lighter_bg'], 
                     foreground=colors['dark_text'], 
-                    fieldbackground='white',
-                    rowheight=25)
+                    fieldbackground=colors['lighter_bg'],
+                    rowheight=28,
+                    bordercolor=colors['border'],
+                    lightcolor=colors['lighter_bg'],
+                    darkcolor=colors['lighter_bg'])
+                    
         style.map('Treeview', 
-                background=[('selected', colors['accent'])],
-                foreground=[('selected', colors['light_text'])])
+                background=[('selected', colors['primary'] + '80')],  # 50% transparente
+                foreground=[('selected', colors['dark_text'])])
         
-        # Pestañas (Notebook)
-        style.configure("TNotebook", background=colors['light_bg'])
-        style.configure("TNotebook.Tab", 
-                    font=('Segoe UI', 10, 'bold'), 
-                    padding=[15, 5],
+        # Pestañas estilo moderno
+        style.configure("TNotebook", 
                     background=colors['light_bg'],
-                    foreground=colors['dark_text'],
-                    borderwidth=1)
+                    tabmargins=(0, 5, 0, 0))
+                    
+        style.configure("TNotebook.Tab", 
+                    font=('Segoe UI Semibold', 10), 
+                    padding=[15, 6],
+                    background=colors['light_bg'],
+                    foreground=colors['medium_text'],
+                    borderwidth=0,
+                    focuscolor=colors['light_bg'])
+                    
         style.map("TNotebook.Tab", 
-                background=[("selected", colors['primary'])], 
-                foreground=[("selected", colors['light_text'])],
+                background=[("selected", colors['lighter_bg'])], 
+                foreground=[("selected", colors['primary'])],
                 expand=[("selected", [1, 1, 1, 0])])
         
-        # Barras de desplazamiento
+        # Barras de desplazamiento modernas
         style.configure("Vertical.TScrollbar", 
+                    arrowsize=12,
                     gripcount=0,
-                    background=colors['primary'],
+                    background=colors['primary'] + '40',  # 25% transparente
                     troughcolor=colors['light_bg'],
                     bordercolor=colors['light_bg'],
-                    arrowcolor=colors['light_text'],
+                    arrowcolor=colors['primary'],
                     lightcolor=colors['primary'],
                     darkcolor=colors['primary'])
         
-        # Campos de entrada
+        # Campos de entrada modernos
         style.configure('TEntry', 
-                    fieldbackground='white',
+                    fieldbackground=colors['lighter_bg'],
                     foreground=colors['dark_text'],
-                    bordercolor=colors['accent'],
-                    lightcolor=colors['accent'],
-                    darkcolor=colors['accent'])
-        style.map('TEntry',
-                fieldbackground=[('readonly', '#e9ecef')],
-                foreground=[('readonly', '#6c757d')])
-    
-    def registrar_ausencias(self, fecha):
-        """Registra ausencias para una fecha específica"""
-        try:
-            usuarios = self.obtener_lista_usuarios()
-            asistencias = self.obtener_asistencias_por_fecha(fecha)
-            
-            for usuario in usuarios:
-                if usuario['Carnet'] not in asistencias:
-                    self.actualizar_estadisticas(
-                        usuario['Carnet'],
-                        usuario['Nombre'],
-                        usuario['Carrera'],
-                        asistio=False
-                    )
+                    bordercolor=colors['border'],
+                    lightcolor=colors['border'],
+                    darkcolor=colors['border'],
+                    padding=5,
+                    insertcolor=colors['accent'])
                     
-        except Exception as e:
-            print(f"Error al registrar ausencias: {e}")
-    
-    def inicializar_estadisticas(self):
-        """Crea el archivo de estadísticas si no existe"""
-        archivo_estadisticas = os.path.join(DIR_ASISTENCIAS, 'estadisticas_asistencias.xlsx')
+        style.map('TEntry',
+                fieldbackground=[('readonly', colors['light_bg'])],
+                foreground=[('readonly', colors['medium_text'])],
+                bordercolor=[('focus', colors['accent'])])
         
-        if not os.path.exists(archivo_estadisticas):
+        # Combobox moderno
+        style.configure('TCombobox',
+                    fieldbackground=colors['lighter_bg'],
+                    foreground=colors['dark_text'],
+                    selectbackground=colors['primary'],
+                    selectforeground=colors['light_text'],
+                    padding=5)
+        style.map('TCombobox',
+                fieldbackground=[('readonly', colors['lighter_bg'])],
+                foreground=[('readonly', colors['dark_text'])],
+                bordercolor=[('focus', colors['accent'])])
+        
+
+    def generar_estadisticas_usuario(self):
+        """Genera un archivo Excel con estadísticas de asistencia por usuario"""
+        try:
+            # Cargar usuarios y asistencias
+            wb_usuarios = load_workbook(ARCHIVO_USUARIOS)
+            ws_usuarios = wb_usuarios.active
+
+            wb_asistencias = load_workbook(ARCHIVO_ASISTENCIAS)
+            ws_asistencias = wb_asistencias.active
+
+            # Organizar asistencias por carnet
+            asistencias_por_carnet = {}
+            for row in ws_asistencias.iter_rows(min_row=2, values_only=True):
+                nombre, carnet, fecha, hora = row
+                if carnet not in asistencias_por_carnet:
+                    asistencias_por_carnet[carnet] = []
+                asistencias_por_carnet[carnet].append(fecha)
+
+            # Crear directorio si no existe
+            reportes_dir = os.path.join(DIR_ASISTENCIAS, "Reportes_Estadisticas")
+            os.makedirs(reportes_dir, exist_ok=True)
+
+            # Nombre del archivo
+            nombre_archivo = os.path.join(reportes_dir, "estadisticas_asistencia.xlsx")
+
+            # Crear libro de Excel
             wb = Workbook()
-            ws = wb.active
-            ws.title = "Estadísticas"
-            
+            ws_resumen = wb.active
+            ws_resumen.title = "Resumen General"
+
             # Encabezados
             encabezados = [
-                "Carnet", 
-                "Nombre", 
-                "Carrera", 
-                "Total Asistencias", 
-                "Total Ausencias",
-                "Porcentaje Asistencia"
+                "Nombre", "Carnet", "Total Registros", 
+                "Asistencias", "Ausencias", "Porcentaje Asistencia"
             ]
-            ws.append(encabezados)
-            
-            # Formato de porcentaje
-            for row in ws.iter_rows(min_row=2, max_col=6, max_row=1000):
-                row[5].number_format = '0.00%'  # Formato porcentaje para la columna 6
-            
-            wb.save(archivo_estadisticas)
+            for col_num, data in enumerate(encabezados, 1):
+                ws_resumen.cell(row=1, column=col_num, value=data)
 
-    def actualizar_estadisticas(self,carnet, nombre, carrera, asistio=True):
-        """Actualiza las estadísticas de asistencia para un usuario"""
-        try:
-            archivo_estadisticas = os.path.join(DIR_ASISTENCIAS, 'estadisticas_asistencias.xlsx')
-            
-            # Si el archivo no existe, lo creamos
-            if not os.path.exists(archivo_estadisticas):
-                self.inicializar_estadisticas()
-            
-            wb = load_workbook(archivo_estadisticas)
-            ws = wb.active
-            
-            # Buscar si el usuario ya existe en las estadísticas
-            usuario_encontrado = False
-            for row in ws.iter_rows(min_row=2, values_only=False):
-                if row[0].value == carnet:  # Comparar por carnet
-                    usuario_encontrado = True
-                    # Actualizar conteos
-                    if asistio:
-                        row[3].value = (row[3].value or 0) + 1  # Incrementar asistencias
-                    else:
-                        row[4].value = (row[4].value or 0) + 1  # Incrementar ausencias
-                    
-                    # Calcular nuevo porcentaje
-                    total = (row[3].value or 0) + (row[4].value or 0)
-                    if total > 0:
-                        row[5].value = (row[3].value or 0) / total
-                    break
-            
-            # Si no existe, agregar nuevo registro
-            if not usuario_encontrado:
-                nuevas_filas = [
-                    carnet,
-                    nombre,
-                    carrera,
-                    1 if asistio else 0,  # Asistencias
-                    0 if asistio else 1,  # Ausencias
-                    1.0 if asistio else 0.0  # Porcentaje inicial
-                ]
-                ws.append(nuevas_filas)
-            
-            # Guardar cambios
-            wb.save(archivo_estadisticas)
-            
+            fila = 2
+            detalles = []
+
+            for row in ws_usuarios.iter_rows(min_row=2, values_only=True):
+                nombre = row[0]
+                carnet = str(row[1])
+
+                todas_fechas = sorted(set([fecha for _, _, fecha, _ in ws_asistencias.iter_rows(min_row=2, values_only=True)]))
+                total_dias = len(todas_fechas)
+
+                asistencias_usuario = asistencias_por_carnet.get(carnet, [])
+                asistencias_count = len(asistencias_usuario)
+                ausencias_count = total_dias - asistencias_count
+                porcentaje = (asistencias_count / total_dias * 100) if total_dias > 0 else 0
+
+                # Agregar a resumen general
+                ws_resumen.append([
+                    nombre, carnet, total_dias,
+                    asistencias_count, ausencias_count, f"{porcentaje:.2f}%"
+                ])
+
+                # Detalles por usuario para otra hoja
+                fechas_presentes = set(asistencias_usuario)
+                fechas_ausentes = [f for f in todas_fechas if f not in fechas_presentes]
+                detalles.append({
+                    "nombre": nombre,
+                    "carnet": carnet,
+                    "fechas_ausentes": fechas_ausentes
+                })
+
+            # Hoja de detalles
+            ws_detalles = wb.create_sheet(title="Detalles Ausencias")
+            ws_detalles.append(["Nombre", "Carnet", "Fechas Ausentes"])
+
+            for detalle in detalles:
+                fechas_str = ", ".join(detalle["fechas_ausentes"]) if detalle["fechas_ausentes"] else "Ninguna"
+                ws_detalles.append([detalle["nombre"], detalle["carnet"], fechas_str])
+
+            # Ajustar anchos de columna
+            for sheet in wb.sheetnames:
+                ws = wb[sheet]
+                for col in ws.columns:
+                    max_length = 0
+                    column = col[0].column_letter
+                    for cell in col:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = (max_length + 2) * 1.2
+                    ws.column_dimensions[column].width = adjusted_width
+
+            # Guardar archivo
+            wb.save(nombre_archivo)
+            messagebox.showinfo("Éxito", f"Estadísticas generadas correctamente en:\n{nombre_archivo}")
+
         except Exception as e:
-            print(f"Error al actualizar estadísticas: {e}")
-    
+            messagebox.showerror("Error", f"Ocurrió un error al generar las estadísticas: {str(e)}")
+        
     
     def inicializar_directorios(self):
         os.makedirs(DIR_QRS, exist_ok=True)
@@ -477,6 +576,9 @@ class SistemaAsistenciasApp:
         
         ttk.Button(frame, text="Exportar Reporte", command=self.exportar_reporte).grid(
             row=4, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(frame, text="Generar Estadísticas", command=self.generar_estadisticas_usuario).grid(
+            row=5, column=0, columnspan=2, pady=10)
     
     def crear_pestana_verificacion(self):
         """Crea la pestaña para verificar asistencias"""
@@ -669,7 +771,7 @@ class SistemaAsistenciasApp:
             nueva_fila = [nombre, carnet, fecha_actual, hora_actual]
             ws.append(nueva_fila)
             wb.save(ARCHIVO_ASISTENCIAS)
-            self.actualizar_estadisticas(carnet, nombre, "Carrera", asistio=True)  
+            # self.actualizar_estadisticas(carnet, nombre, "Carrera", asistio=True)  
             print("Asistencia registrada exitosamente.")
             return True
         except Exception as e:
@@ -814,7 +916,8 @@ class SistemaAsistenciasApp:
             
             # Crear archivo Excel
             self.generar_excel_reporte(fecha, presentes, ausentes)
-            self.registrar_ausencias(fecha) 
+            
+            # self.registrar_ausencias(fecha) 
             messagebox.showinfo("Éxito", "Reporte generado correctamente y guardado en Excel")
             
         except Exception as e:
