@@ -18,6 +18,17 @@ from tkinter import ttk, messagebox, filedialog
 import paho.mqtt.client as mqtt
 
 
+import psycopg2
+
+def conectar_db():
+    return psycopg2.connect(
+        dbname="sistema_asistencias",
+        user="emerson",
+        password="kuto123",
+        host="localhost",
+        port="5432"
+    )
+
 BROKER = "192.168.1.136"
 PORT = 1883
 TOPIC = "/leds"
@@ -59,19 +70,15 @@ class SistemaAsistenciasApp:
         self.mqtt_cliente.connect(BROKER, PORT, 60)
         self.mqtt_cliente.loop_start()
         
-        # Variables para la cámara
         self.cap = None
         self.running = False
         
-        # Crear contenedor principal con sombra visual
         main_container = ttk.Frame(self.root, style='Card.TFrame')
         main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        # Crear el notebook (pestañas) con estilo mejorado
         self.notebook = ttk.Notebook(main_container)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Crear las pestañas
         self.crear_pestana_registro()
         self.crear_pestana_asistencia()
         self.crear_pestana_reportes()
@@ -264,6 +271,29 @@ class SistemaAsistenciasApp:
                 bordercolor=[('focus', colors['accent'])])
         
 
+    def agregar_usuario_db(self, nombre, carnet, edad, telefono, encargado, telefono_encargado, correo_encargado, carrera):
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO usuarios (nombre, carnet, edad, telefono, encargado, telefono_encargado, correo_encargado, carrera)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+        """, (nombre, carnet, edad, telefono, encargado, telefono_encargado, correo_encargado, carrera))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    
+    def registrar_asistencia_db(self, carnet, fecha, hora):
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO asistencias (carnet, fecha, hora)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (carnet, fecha) DO NOTHING;
+        """, (carnet, fecha, hora))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
     def generar_estadisticas_usuario(self):
         """Genera un archivo Excel con estadísticas de asistencia por usuario"""
         try:
@@ -281,14 +311,11 @@ class SistemaAsistenciasApp:
                 if carnet not in asistencias_por_carnet:
                     asistencias_por_carnet[carnet] = []
                 asistencias_por_carnet[carnet].append(fecha)
-
             # Crear directorio si no existe
             reportes_dir = os.path.join(DIR_ASISTENCIAS, "Reportes_Estadisticas")
             os.makedirs(reportes_dir, exist_ok=True)
-
             # Nombre del archivo
             nombre_archivo = os.path.join(reportes_dir, "estadisticas_asistencia.xlsx")
-
             # Crear libro de Excel
             wb = Workbook()
             ws_resumen = wb.active
@@ -704,7 +731,7 @@ class SistemaAsistenciasApp:
                 return
                 
             self.agregar_datos_usuario(nombre, carnet, edad, telefono, encargado, telefono_encargado, correo, carrera)
-            
+            self.agregar_usuario_db(nombre, carnet, edad, telefono, encargado, telefono_encargado, correo, carrera)
             self.registro_message.config(
                 text=f"Usuario {nombre} registrado exitosamente con carnet {carnet}",
                 foreground="green"
@@ -726,6 +753,8 @@ class SistemaAsistenciasApp:
             return
             
         self.running = True
+        # droidcam_url = "http://192.168.1.99:4747/video"  # Agrega /video al final
+        # self.cap = cv2.VideoCapture(droidcam_url)
         self.cap = cv2.VideoCapture(0)
         self.asistencia_message.config(text="Escanea el código QR... Presiona 'Detener Cámara' para salir.")
         self.leer_qr()
@@ -783,7 +812,7 @@ class SistemaAsistenciasApp:
         try:
             if "Carnet:" not in data or "Nombre:" not in data:
                 print("Formato incorrecto: faltan 'Carnet:' o 'Nombre:' en la cadena.")
-                return None, None
+                return None, None7
             
             carnet = data.split("Carnet:")[1].split("Nombre:")[0].strip()
             nombre = data.split("Nombre:")[1].strip()
@@ -793,50 +822,61 @@ class SistemaAsistenciasApp:
             return None, None
         
     def leer_qr(self):
-        """Lee códigos QR de la cámara"""
-
+        """Lee códigos QR desde la cámara y registra asistencias"""
         if not self.running or not self.cap:
             return
-            
+
         ret, frame = self.cap.read()
         if ret:
+            # Convertir imagen para mostrar en canvas
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(frame)
-            imgtk = ImageTk.PhotoImage(image=img)            
+            imgtk = ImageTk.PhotoImage(image=img)
             self.canvas.imgtk = imgtk
             self.canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
-            
+
+            # Detectar códigos QR
             codigos = decode(frame)
+
             if codigos:
                 for codigo in codigos:
                     try:
                         data = codigo.data.decode('utf-8')
                         nombre, carnet = self.procesar_datos_qr(data)
-                        
+
                         if nombre and carnet and self.verificar_carnet(carnet):
+                            fecha_actual = time.strftime("%Y-%m-%d")
+                            hora_actual = time.strftime("%H:%M:%S")
+
                             if self.registrar_asistencia(nombre, carnet):
-                                self.asistencia_message.config(
-                                    text=f"Asistencia registrada: {nombre} ({carnet})", 
-                                    foreground='green')
-                                self.mqtt_cliente.publish(TOPIC, "0") 
-                                self.mqtt_cliente.publish(TOPIC_PANTALLA,f"{carnet}")
+                                mensaje = f"Asistencia registrada: {nombre} ({carnet})"
+                                color = 'green'
+                                self.mqtt_cliente.publish(TOPIC, "0")
+                                self.mqtt_cliente.publish(TOPIC_PANTALLA, f"{carnet}")
                             else:
-                                self.asistencia_message.config(
-                                    text="Asistencias ya registradas hoy", 
-                                    foreground='orange')
+                                mensaje = "Asistencias ya registradas hoy"
+                                color = 'orange'
                                 self.mqtt_cliente.publish(TOPIC, "1")
-                                self.mqtt_cliente.publish(TOPIC_PANTALLA, "Asistencia Registrada")  
+                                self.mqtt_cliente.publish(TOPIC_PANTALLA, "Asistencia Registrada")
+                        elif nombre is None or carnet is None:
+                            mensaje = "Código QR no válido"
+                            color = 'red'
+                            self.mqtt_cliente.publish(TOPIC, "1")
+                            self.mqtt_cliente.publish(TOPIC_PANTALLA, "Codigo QR no Valido")
                         else:
-                            self.asistencia_message.config(
-                                text="Código QR no válido", 
-                                foreground='red')
-                            self.mqtt_cliente.publish(TOPIC_PANTALLA,"Codigo QR no Valido")
-                            self.mqtt_cliente.publish(TOPIC, "1")  
-                            
+                            time.sleep(1.5)
+                            mensaje = "Carnet no encontrado"
+                            self.mqtt_cliente.publish(TOPIC, "2")
+                            self.mqtt_cliente.publish(TOPIC_PANTALLA, "MARQUE ASISTENCIA")
+                        self.asistencia_message.config(text=mensaje, foreground=color)
+
+                    except UnicodeDecodeError:
+                        print("Error al decodificar los datos del QR.")
+                        self.asistencia_message.config(text="Datos del QR corruptos", foreground='red')
+                        self.mqtt_cliente.publish(TOPIC, "1")
                     except Exception as e:
-                        print(f"Error al procesar código QR: {e}")
-                        self.mqtt_cliente.publish(TOPIC, "1")  
-        
+                        print(f"Error inesperado al procesar código QR: {e}")
+                        self.mqtt_cliente.publish(TOPIC, "1")
         if self.running:
             self.root.after(10, self.leer_qr)
 
