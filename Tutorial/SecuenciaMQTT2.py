@@ -2,6 +2,29 @@ import tkinter as tk
 from tkinter import ttk
 import paho.mqtt.client as mqtt
 
+secuencias = {
+    "BI_1_BD_1" : 0,
+    "BI_1_BD_2" : 1,
+    "BI_1_BD_3" : 2,
+    "BI_2_BD_1" : 3,
+    "BI_2_BD_2" : 4,
+    "BI_2_BD_3" : 5,
+    "BI_3_BD_1" : 6,
+    "BI_3_BD_2" : 7,
+    "BI_3_BD_3" : 8,
+    "BD_1_BI_1" : 9,
+    "BD_1_BI_2" : 10,
+    "BD_1_BI_3" : 11,
+    "BD_2_BI_1" : 12,
+    "BD_2_BI_2" : 13,
+    "BD_2_BI_3" : 14,
+    "BD_3_BI_1" : 15,
+    "BD_3_BI_2" : 16,
+    "BD_3_BI_3" : 17,
+    
+}
+for i in secuencias:
+    print(i)
 def create_gui():
     root = tk.Tk()
     root.title("Control MQTT - Secuencias")
@@ -155,7 +178,10 @@ def create_gui():
                 bg=COLORS['success'],
                 fg='#1e1e2e'
             )
-            send_mqtt_message(combination)
+            for i in secuencias:
+                if i == combination:
+                    print(secuencias[i])
+                    send_mqtt_message(secuencias[i])
         elif left_selected:
             status_label.config(
                 text=f"⬅️  Seleccionado: {left_selected}",
