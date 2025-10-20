@@ -436,6 +436,9 @@ def create_gui():
                     lambda: send_command("control/motor4", "LEFT"),
                     lambda: send_command("control/motor4", "RIGHT"))
 
+    create_motor_card(main_frame, "🦾 MOTOR 5 - ESLABÓN 2 - ESLABON 1", 5,
+                    lambda: send_command("control/motor5", "LEFT"),
+                    lambda: send_command("control/motor5", "RIGHT"))
     # Estado de conexión
     status_frame = tk.Frame(main_frame, bg=COLORS['card_bg'], relief='flat')
     status_frame.grid(row=5, column=0, columnspan=3, pady=20, sticky='ew')
