@@ -1,19 +1,19 @@
 from tkinter import *
 
 
-
-
 import time
 import paho.mqtt.client as mqtt
 
-BROKER = "192.168.1.136"  
-PORT = 1883              
-TOPIC = "/brillo"   
+BROKER = "192.168.1.136"
+PORT = 1883
+TOPIC = "/brillo"
 
 cliente = mqtt.Client()
 
+
 def on_connect(client, userdata, flags, rc):
     print(f"Conectado al broker con código: {rc}")
+
 
 cliente.on_connect = on_connect
 
@@ -27,11 +27,14 @@ def update_label(value):
     print(value)
     cliente.publish(TOPIC, value)
 
+
 root = Tk()
 root.title("Tkinter Slider with Command")
 root.geometry("300x200")
 
-slider = Scale(root, from_=0, to=100, orient=HORIZONTAL, label="Adjust Value", command=update_label)
+slider = Scale(
+    root, from_=0, to=100, orient=HORIZONTAL, label="Adjust Value", command=update_label
+)
 slider.pack(pady=20)
 my_label = Label(root, text="Current Value: 0")
 
@@ -44,5 +47,7 @@ def on_closing():
     cliente.disconnect()
     root.destroy()
 
+
 root.protocol("WM_DELETE_WINDOW", on_closing)
 root.mainloop()
+

@@ -43,7 +43,7 @@ print(result.start())
 text = "Todo el mundo dice que la IA nos va a quitar el trabajo. Pero solo hace falta ver como la puede cagar con las Regex para ir con cuidado"
 pattern = "IA"
 found_ia = re.search(pattern, text)
-if found_ia:
+    if found_ia:
     print(
         f"He encontrado el patron en el texto la posicion {found_ia.start()} y termina en la posicion {found_ia.end()}"
     )
